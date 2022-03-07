@@ -95,6 +95,7 @@ def main(argv: Sequence[str]) -> None:
   ])
 
   metrics = [
+      tf.keras.metrics.BinaryAccuracy(),
       tf.keras.metrics.AUC(),
   ]
   for class_id, class_name in enumerate(class_names):

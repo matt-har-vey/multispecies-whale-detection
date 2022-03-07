@@ -13,18 +13,22 @@
 # limitations under the License.
 """Model and runner for training and evaluation.
 
-python -m multispecies_whale_detection.scripts.train
+python -m multispecies_whale_detection.scripts.train --base_dir=$B
 
-will use TensorFlow and Keras to train an audio event detection model and
-periodically log evaluation metrics.
+will use TensorFlow and Keras to train an audio event detection model.
 
-base_dir
+This script assumes a directory naming convention, as follows:
+
+base_dir               (must be passed in via the --base_dir flag)
   +- input/
     +- train/
-      +- tfrecords-*
+      +- tfrecords-*   (user-provided examplegen output to train on)
     +- validation/
-      +- tfrecords-*
+      +- tfrecords-*   (user-provided examplegen output for validation)
   +- output/
+    +- saved_models/   (per-epoch SavedModel exports)
+    +- backup/         (checkpoint for resuming an interrupted run)
+    +- tensorboard/    (logs of validation metrics to be read by TensorBoard)
 """
 
 import os
@@ -42,65 +46,95 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string('base_dir', None,
                     'Base directory with input/ and output/ subdirectories.')
-
-CLASS_NAMES = ['Orca', 'SRKW']
-
-
-def preprocess(spectrogram):
-  # Keras applications EfficientNet expects input in [0.0, 255.0].
-  low_limit_db = -6.0
-  high_limit_db = 90.0
-  low_limit_model = 0.0
-  high_limit_model = 255.0
-  scaled = ((high_limit_model - low_limit_model) *
-            (spectrogram - low_limit_db) / (high_limit_db - low_limit_db))
-  # Adds RGB color channel dimension where all are equal.
-  fake_image = tf.tile(tf.expand_dims(scaled, -1), [1, 1, 1, 3])
-  return fake_image
+flags.DEFINE_integer(
+    'batch_size', 512,
+    'Size of minibatches, common to both training and validation.')
+flags.DEFINE_list(
+    'class_names', ['whale'],
+    'Label values from examplegen input CSV and output ANNOTATION_LABEL features.'
+)
 
 
 def main(argv: Sequence[str]) -> None:
   del argv
 
-  batch_size = 512
+  base_dir = FLAGS.base_dir
+  class_names = FLAGS.class_names
+  batch_size = FLAGS.batch_size
 
-  train_dataset = dataset.new_window_dataset(
-      tfrecord_filepattern=os.path.join(FLAGS.base_dir, 'input', 'train',
-                                        'tfrecords-*'),
-      duration=1.0,
-      class_names=CLASS_NAMES,
-      windowing=dataset.RandomWindowing(4),
-      min_overlap=0.25,
-  ).shuffle(batch_size * 4).batch(batch_size).prefetch(1)
+  def configured_window_dataset(
+      input_subdirectory: str,
+      windowing: dataset.Windowing,
+  ) -> tf.data.Dataset:
+    """Creates a Dataset, binding arguments shared by train and validation."""
+    return dataset.new_window_dataset(
+        tfrecord_filepattern=os.path.join(base_dir, 'input', input_subdirectory,
+                                          'tfrecords-*'),
+        windowing=windowing,
+        duration=1.0,
+        class_names=class_names,
+        min_overlap=0.25,
+    )
 
-  validation_dataset = dataset.new_window_dataset(
-      tfrecord_filepattern=os.path.join(FLAGS.base_dir, 'input', 'validation',
-                                        'tfrecords-*'),
-      duration=1.0,
-      class_names=CLASS_NAMES,
-      windowing=dataset.RandomWindowing(4),
-      min_overlap=0.25,
-  ).batch(batch_size).prefetch(1)
+  train_dataset = configured_window_dataset(
+      'train', dataset.RandomWindowing(4)).shuffle(
+          batch_size * 4).batch(batch_size).prefetch(1)
+
+  validation_dataset = configured_window_dataset(
+      'validation', dataset.SlidingWindowing(0.5)).batch(batch_size).prefetch(1)
 
   model = tf.keras.Sequential([
       front_end.Spectrogram(),
-      tf.keras.layers.Lambda(preprocess),
+      front_end.SpectrogramToImage(),
       tf.keras.applications.EfficientNetB0(
           include_top=False,
           weights=None,
           pooling='max',
       ),
-      tf.keras.layers.Dense(len(CLASS_NAMES), activation='sigmoid'),
+      tf.keras.layers.Dense(len(class_names), activation='sigmoid'),
   ])
+
+  metrics = [
+      tf.keras.metrics.AUC(),
+  ]
+  for class_id, class_name in enumerate(class_names):
+    metrics.extend([
+        tf.keras.metrics.Precision(
+            class_id=class_id, name=f'{class_name}_precision'),
+        tf.keras.metrics.Recall(class_id=class_id, name=f'{class_name}_recall'),
+    ])
+    for recall in [0.1, 0.5, 0.8]:
+      metrics.append(
+          tf.keras.metrics.PrecisionAtRecall(
+              recall,
+              class_id=class_id,
+              name=f'{class_name}_precision_at_{recall:02f}'))
+    for specificity in [0.9, 0.99, 0.999]:
+      metrics.append(
+          tf.keras.metrics.SensitivityAtSpecificity(
+              specificity,
+              class_id=class_id,
+              name=f'{class_name}_sensitivity_at_{specificity:02f}'))
+
   model.compile(
       optimizer='adam',
       loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
+      metrics=metrics,
   )
 
   model.fit(
       train_dataset,
       validation_data=validation_dataset,
       epochs=10,
+      callbacks=[
+          tf.keras.callbacks.ModelCheckpoint(
+              os.path.join(base_dir, 'output', 'saved_models')),
+          tf.keras.callbacks.BackupAndRestore(
+              os.path.join(base_dir, 'output', 'backup')),
+          tf.keras.callbacks.TensorBoard(
+              os.path.join(base_dir, 'output', 'tensorboard'),
+              update_freq='epoch'),
+      ],
   )
 
 

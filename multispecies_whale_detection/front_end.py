@@ -171,7 +171,7 @@ class Spectrogram(tf.keras.layers.Layer):
       config = SpectrogramConfig()
     self._config = config
 
-  def call(self, waveform, training=False):
+  def call(self, waveform: tf.Tensor, training: bool = False) -> tf.Tensor:
     sample_rate = self._config.sample_rate
     magnitude = spectrogram(
         waveform,
@@ -214,3 +214,73 @@ class Spectrogram(tf.keras.layers.Layer):
     else:
       normalization = None
     return cls(SpectrogramConfig(normalization=normalization, **config))
+
+
+class SpectrogramToImage(tf.keras.layers.Layer):
+  """Keras layer to scale and add "color" channels to a spectrogram.
+
+  Stock image classifiation models such as those in tf.keras.applications expect
+  RGB images as input and make model-type-dependent assumptions about the range
+  of input values.
+
+  The :py:class:Spegtrogram layer in this module outputs 2-dimensional examples.
+  This layer provides matching to stock model input by adding a trailing
+  dimension, across which the spectrograms are tiled, which in effect builds a
+  grayscale image.
+  """
+
+  def __init__(
+      self,
+      sgram_min: float = -6.0,
+      sgram_max: float = 90.0,
+      # Keras Applications EfficientNet expects input in [0.0, 255.0].
+      model_min: float = 0.0,
+      model_max: float = 255.0,
+  ):
+    """Initializes this layer.
+
+    [sgram_min, sgram_max] will be scaled to [model_min, model_max] by an affine
+    transformation and without clipping.
+
+    Args:
+      sgram_min: The nominal minimum value in outputs of the Spectrogram layer.
+        This depends on the normalization type and specifics of the dataset. The
+        default value works well with noise floor normalization. This will be
+        scaled to model_min, but values below it will not be clipped.
+      sgram_max: The nominal maximum value in outputs of the Spectrogram layer.
+        See sgram_min for usage considerations.
+      model_min: The lower bound of the expected range for model inputs. (The
+        default value of 0.0 suits tf.keras.applications.EfficientNetB0.)
+      model_max: The upper bound of the expected range for model inputs. (The
+        default value of 255.0 suits tf.keras.applications.EfficientNetB0.)
+    """
+    super(SpectrogramToImage, self).__init__()
+    self._sgram_min = sgram_min
+    self._sgram_max = sgram_max
+    self._model_min = model_min
+    self._model_max = model_max
+
+  def call(self, spectrogram: tf.Tensor, training: bool = False) -> tf.Tensor:
+    scaled = ((self._model_max - self._model_min) *
+              (spectrogram - self._sgram_min) /
+              (self._sgram_max - self._sgram_min))
+    # Adds RGB color channel dimension where all are equal.
+    num_color_channels = 3
+    fake_image = tf.tile(
+        tf.expand_dims(scaled, -1),
+        [1 for _ in range(spectrogram.shape.rank)] + [num_color_channels])
+    return fake_image
+
+  def get_config(self):
+    """Implements Layer.get_config."""
+    return dict(
+        sgram_min=self._sgram_min,
+        sgram_max=self._sgram_max,
+        model_min=self._model_min,
+        model_max=self._model_max,
+    )
+
+  @classmethod
+  def from_config(cls, config):
+    """Implements Layer.from_config."""
+    return cls(**config)

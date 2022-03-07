@@ -88,6 +88,7 @@ setuptools.setup(
     author='Google Bioacoustics Project',
     author_email='bioacoustics-project@google.com',
     install_requires=[
+        'absl-py',
         'apache_beam',
         'apache_beam[gcp]',
         'python-dateutil',

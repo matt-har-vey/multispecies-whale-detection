@@ -97,6 +97,7 @@ setuptools.setup(
         'numpy',
         'resampy',
         'soundfile',
+        'tensorboard',
         'tensorflow',
         'tensorflow_probability',
         # not a direct dependency, but beam.io.tfrecordio asks for this to be as

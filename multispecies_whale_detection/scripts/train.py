@@ -13,13 +13,17 @@
 # limitations under the License.
 """Model and runner for training and evaluation.
 
-Useful commands:
+Usage templates for the command line:
+
 
 BASE_DIR=$HOME/tmp/base_dir
 
-python -m multispecies_whale_detection.scripts.train --base_dir=$BASE_DIR
+python -m multispecies_whale_detection.scripts.train \
+    --base_dir=$BASE_DIR \
+    --class_names=Bm,Mn,Bp,Ej
 
 tensorboard --logdir=$BASE_DIR/output/tensorboard
+
 
 The above will use TensorFlow and Keras to train an audio event detection model,
 assuming the user has set BASE_DIR to a directory they have created and in which
@@ -53,13 +57,13 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string('base_dir', None,
                     'Base directory with input/ and output/ subdirectories.')
+flags.DEFINE_list(
+    'class_names', None,
+    'Label values from examplegen input CSV and output ANNOTATION_LABEL features.'
+)
 flags.DEFINE_integer(
     'batch_size', 512,
     'Size of minibatches, common to both training and validation.')
-flags.DEFINE_list(
-    'class_names', ['whale'],
-    'Label values from examplegen input CSV and output ANNOTATION_LABEL features.'
-)
 
 
 def main(argv: Sequence[str]) -> None:
@@ -151,4 +155,6 @@ def main(argv: Sequence[str]) -> None:
 
 if __name__ == '__main__':
   flags.mark_flag_as_required('base_dir')
+  flags.mark_flag_as_required('class_names')
+
   app.run(main)

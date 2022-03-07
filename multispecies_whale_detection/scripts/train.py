@@ -13,13 +13,20 @@
 # limitations under the License.
 """Model and runner for training and evaluation.
 
-python -m multispecies_whale_detection.scripts.train --base_dir=$B
+Useful commands:
 
-will use TensorFlow and Keras to train an audio event detection model.
+BASE_DIR=$HOME/tmp/base_dir
 
-This script assumes a directory naming convention, as follows:
+python -m multispecies_whale_detection.scripts.train --base_dir=$BASE_DIR
 
-base_dir               (must be passed in via the --base_dir flag)
+tensorboard --logdir=$BASE_DIR/output/tensorboard
+
+The above will use TensorFlow and Keras to train an audio event detection model,
+assuming the user has set BASE_DIR to a directory they have created and in which
+they have populated an input/ subdirectory. That directory should be populated,
+and outputs will be written, according to a naming convention, as follows:
+
+base_dir               (passed in via the --base_dir flag)
   +- input/
     +- train/
       +- tfrecords-*   (user-provided examplegen output to train on)
@@ -77,11 +84,14 @@ def main(argv: Sequence[str]) -> None:
     )
 
   train_dataset = configured_window_dataset(
-      'train', dataset.RandomWindowing(4)).shuffle(
-          batch_size * 4).batch(batch_size).prefetch(1)
+      'train',
+      dataset.RandomWindowing(4),
+  ).shuffle(batch_size * 4).batch(batch_size).prefetch(1)
 
   validation_dataset = configured_window_dataset(
-      'validation', dataset.SlidingWindowing(0.5)).batch(batch_size).prefetch(1)
+      'validation',
+      dataset.SlidingWindowing(0.5),
+  ).batch(batch_size).prefetch(1)
 
   model = tf.keras.Sequential([
       front_end.Spectrogram(),

@@ -352,6 +352,8 @@ def new_window_dataset(
     return dataset
 
   filenames = tf.io.gfile.glob(tfrecord_filepattern)
+  if not filenames:
+    raise Exception('glob pattern did not match any files')
   dataset = tf.data.Dataset.from_tensor_slices(filenames)
   dataset = dataset.interleave(
       shard_fn,

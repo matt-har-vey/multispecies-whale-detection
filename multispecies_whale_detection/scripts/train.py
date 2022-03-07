@@ -17,7 +17,17 @@ python -m multispecies_whale_detection.scripts.train
 
 will use TensorFlow and Keras to train an audio event detection model and
 periodically log evaluation metrics.
+
+base_dir
+  +- input/
+    +- train/
+      +- tfrecords-*
+    +- validation/
+      +- tfrecords-*
+  +- output/
 """
+
+import os
 
 from typing import Sequence
 
@@ -29,12 +39,40 @@ from multispecies_whale_detection import dataset
 
 FLAGS = flags.FLAGS
 
-flags.DEFINE_string('base_dir', None, 'Base directory for input and output.')
+flags.DEFINE_string('base_dir', None,
+                    'Base directory with input/ and output/ subdirectories.')
+
+CLASS_NAMES = ['Orca', 'SRKW']
 
 
 def main(argv: Sequence[str]) -> None:
   del argv
-  print(FLAGS.base_dir)
+
+  batch_size = 512
+
+  train_dataset = dataset.new_window_dataset(
+      tfrecord_filepattern=os.path.join(FLAGS.base_dir, 'input', 'train',
+                                        'tfrecords-*'),
+      duration=1.0,
+      class_names=CLASS_NAMES,
+      windowing=dataset.RandomWindowing(4),
+      min_overlap=0.25,
+  ).shuffle(batch_size * 4).batch(batch_size).prefetch(1)
+
+  validation_dataset = dataset.new_window_dataset(
+      tfrecord_filepattern=os.path.join(FLAGS.base_dir, 'input', 'validation',
+                                        'tfrecords-*'),
+      duration=1.0,
+      class_names=CLASS_NAMES,
+      windowing=dataset.RandomWindowing(4),
+      min_overlap=0.25,
+  ).batch(batch_size).prefetch(1)
+
+  for batch in validation_dataset:
+    features, labels = batch
+    if tf.reduce_any(labels > 0.0):
+      print(batch)
+      break
 
 
 if __name__ == '__main__':

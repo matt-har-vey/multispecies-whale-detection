@@ -64,6 +64,8 @@ flags.DEFINE_list(
 flags.DEFINE_integer(
     'batch_size', 512,
     'Size of minibatches, common to both training and validation.')
+flags.DEFINE_float('learning_rate', 1e-4,
+                   'Initial learning rate to pass to the optimizer.')
 
 
 def main(argv: Sequence[str]) -> None:
@@ -72,6 +74,7 @@ def main(argv: Sequence[str]) -> None:
   base_dir = FLAGS.base_dir
   class_names = FLAGS.class_names
   batch_size = FLAGS.batch_size
+  learning_rate = FLAGS.learning_rate
 
   def configured_window_dataset(
       input_subdirectory: str,
@@ -132,7 +135,7 @@ def main(argv: Sequence[str]) -> None:
               name=f'{class_name}_sensitivity_at_{specificity:02f}'))
 
   model.compile(
-      optimizer='adam',
+      optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate),
       loss=tf.keras.losses.BinaryCrossentropy(from_logits=False),
       metrics=metrics,
   )

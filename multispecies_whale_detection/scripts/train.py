@@ -90,12 +90,12 @@ def main(argv: Sequence[str]) -> None:
   train_dataset = configured_window_dataset(
       'train',
       dataset.RandomWindowing(4),
-  ).shuffle(batch_size * 4).batch(batch_size).prefetch(1)
+  ).cache().repeat().shuffle(batch_size * 4).batch(batch_size).prefetch(1)
 
   validation_dataset = configured_window_dataset(
       'validation',
       dataset.SlidingWindowing(0.5),
-  ).batch(batch_size).prefetch(1)
+  ).cache().batch(batch_size).prefetch(1)
 
   model = tf.keras.Sequential([
       front_end.Spectrogram(),
@@ -141,6 +141,7 @@ def main(argv: Sequence[str]) -> None:
       train_dataset,
       validation_data=validation_dataset,
       epochs=10,
+      steps_per_epoch=10000,
       callbacks=[
           tf.keras.callbacks.ModelCheckpoint(
               os.path.join(base_dir, 'output', 'saved_models')),

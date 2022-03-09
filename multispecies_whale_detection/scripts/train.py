@@ -101,7 +101,12 @@ def main(argv: Sequence[str]) -> None:
   ).cache().batch(batch_size).prefetch(1)
 
   model = tf.keras.Sequential([
-      front_end.Spectrogram(),
+      front_end.Spectrogram(
+          front_end.SpectrogramConfig(
+              frequency_scaling=front_end.MelScalingConfig(
+                  lower_edge_hz=60.0,
+                  num_mel_bins=128,
+              ))),
       front_end.SpectrogramToImage(),
       tf.keras.applications.EfficientNetB0(
           include_top=False,

@@ -67,6 +67,9 @@ flags.DEFINE_integer(
     'Size of minibatches, common to both training and validation.')
 flags.DEFINE_float('learning_rate', 1e-4,
                    'Initial learning rate to pass to the optimizer.')
+flags.DEFINE_float(
+    'dropout', 0.2,
+    'Fraction of units to drop out after the final global pooling layer.')
 
 flags.DEFINE_float(
     'context_window_duration', 1.0,
@@ -121,6 +124,7 @@ def main(argv: Sequence[str]) -> None:
           weights=None,
           pooling='max',
       ),
+      tf.keras.layers.Dropout(FLAGS.dropout),
       tf.keras.layers.Dense(len(class_names), activation='sigmoid'),
   ])
 

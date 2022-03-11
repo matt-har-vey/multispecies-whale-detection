@@ -61,11 +61,19 @@ flags.DEFINE_list(
     'class_names', None,
     'Label values from examplegen input CSV and output ANNOTATION_LABEL features.'
 )
+
 flags.DEFINE_integer(
     'batch_size', 512,
     'Size of minibatches, common to both training and validation.')
 flags.DEFINE_float('learning_rate', 1e-4,
                    'Initial learning rate to pass to the optimizer.')
+
+flags.DEFINE_float(
+    'context_window_duration', 1.0,
+    'Duration, in seconds, of audio input to a non-batch model call.')
+flags.DEFINE_integer('train_windows_per_clip', 4,
+                     ('Number of random-start context windows to sample '
+                      'from each clip during training.'))
 
 
 def main(argv: Sequence[str]) -> None:
@@ -85,7 +93,7 @@ def main(argv: Sequence[str]) -> None:
         tfrecord_filepattern=os.path.join(base_dir, 'input', input_subdirectory,
                                           'tfrecords-*'),
         windowing=windowing,
-        duration=1.0,
+        duration=FLAGS.context_window_duration,
         class_names=class_names,
         min_overlap=0.25,
     )
@@ -97,7 +105,7 @@ def main(argv: Sequence[str]) -> None:
 
   validation_dataset = configured_window_dataset(
       'validation',
-      dataset.SlidingWindowing(0.5),
+      dataset.SlidingWindowing(FLAGS.context_window_duration / 2),
   ).cache().batch(batch_size).prefetch(1)
 
   model = tf.keras.Sequential([

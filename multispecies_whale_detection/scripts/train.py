@@ -122,8 +122,8 @@ def main(argv: Sequence[str]) -> None:
   ]
   for class_id, class_name in enumerate(class_names):
     metrics.extend([
-        tf.keras.metrics.Precision(
-            class_id=class_id, name=f'{class_name}_precision'),
+        tf.keras.metrics.Precision(class_id=class_id,
+                                   name=f'{class_name}_precision'),
         tf.keras.metrics.Recall(class_id=class_id, name=f'{class_name}_recall'),
     ])
     for recall in [0.1, 0.5, 0.8]:
@@ -152,13 +152,15 @@ def main(argv: Sequence[str]) -> None:
       steps_per_epoch=10000,
       callbacks=[
           tf.keras.callbacks.ModelCheckpoint(
-              os.path.join(base_dir, 'output', 'saved_models')),
+              os.path.join(base_dir, 'output', 'saved_models',
+                           'epoch_{epoch:03d}')),
           tf.keras.callbacks.BackupAndRestore(
               os.path.join(base_dir, 'output', 'backup')),
-          tf.keras.callbacks.TensorBoard(
-              os.path.join(base_dir, 'output', 'tensorboard'),
-              update_freq='epoch'),
+          tf.keras.callbacks.TensorBoard(os.path.join(base_dir, 'output',
+                                                      'tensorboard'),
+                                         update_freq='epoch'),
       ],
+      verbose=2,  # We are using .fit() non-interactively.
   )
 
 

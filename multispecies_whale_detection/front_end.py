@@ -21,7 +21,7 @@ import tensorflow_probability as tfp
 
 
 def amplitude_ratio_to_db(x):
-  return 20.0 * tf.math.log(x) / tf.math.log(10)
+  return 20.0 * tf.math.log(x) / tf.math.log(10.0)
 
 
 def power_ratio_to_db(x):

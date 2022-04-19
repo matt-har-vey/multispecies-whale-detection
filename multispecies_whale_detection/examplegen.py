@@ -24,6 +24,7 @@ import datetime
 import functools
 import io
 import itertools
+import logging
 import os
 from typing import BinaryIO, Dict, Iterable, Optional, Tuple, TypeVar, Union
 
@@ -40,6 +41,10 @@ import soundfile
 import tensorflow as tf
 
 T = TypeVar('T')
+
+
+class SoundfileError(Exception):
+  pass
 
 
 def _only_element(iterable: Iterable[T], default_value: T = None) -> T:
@@ -442,8 +447,12 @@ def generate_clips(
     # forget that the non-XWAV branch may need to work with hours-long files
     # that are too big to pre-read into memory, nor that the non-XWAV branch
     # does not implement hop size yet.
-    infile.seek(0)
-    reader = soundfile.SoundFile(infile)
+    try:
+      infile.seek(0)
+      reader = soundfile.SoundFile(infile)
+    except RuntimeError as e:
+      raise SoundfileError from e
+
     sample_rate = reader.samplerate
     clip_duration_samples = np.round(clip_duration.total_seconds() *
                                      sample_rate).astype(int)
@@ -463,9 +472,12 @@ def generate_clips(
           start_relative_to_file=clip_rel_file,
           start_utc=None,
       )
-      clip_samples = reader.read(clip_duration_samples,
-                                 dtype='int16',
-                                 always_2d=True)
+      try:
+        clip_samples = reader.read(clip_duration_samples,
+                                   dtype='int16',
+                                   always_2d=True)
+      except RuntimeError as e:
+        raise SoundfileError from e
       yield (clip_metadata, clip_samples)
       clip_index_in_file += 1
 
@@ -603,31 +615,35 @@ def make_audio_examples(
   annotation_trees = AnnotationTrees(join_result['annotations'])
 
   with readable_file.open() as infile:
-    for clip_metadata, clip_samples in generate_clips(filename, infile,
-                                                      clip_duration):
-      if np.round(clip_metadata.sample_rate) == np.round(resample_rate):
-        pcm_audio = clip_samples
-      else:
-        pcm_audio = resampy.resample(
-            clip_samples,
-            clip_metadata.sample_rate,
-            resample_rate,
-            axis=0,
-        )
+    try:
+      for clip_metadata, clip_samples in generate_clips(filename, infile,
+                                                        clip_duration):
+        if np.round(clip_metadata.sample_rate) == np.round(resample_rate):
+          pcm_audio = clip_samples
+        else:
+          pcm_audio = resampy.resample(
+              clip_samples,
+              clip_metadata.sample_rate,
+              resample_rate,
+              axis=0,
+          )
 
-      clip_annotations = annotation_trees.annotate_clip(clip_metadata)
+        clip_annotations = annotation_trees.annotate_clip(clip_metadata)
 
-      for channel, waveform in enumerate(pcm_audio.T):
-        # TODO(mattharvey): Option for annotations to pertain to either or all
-        # channels or a specific channel.
-        beam.metrics.Metrics.counter('examplegen', 'examples-generated').inc()
-        yield audio_example(
-            clip_metadata=clip_metadata,
-            waveform=waveform,
-            sample_rate=resample_rate,
-            channel=channel,
-            annotations=clip_annotations,
-        )
+        for channel, waveform in enumerate(pcm_audio.T):
+          # TODO(mattharvey): Option for annotations to pertain to either or all
+          # channels or a specific channel.
+          beam.metrics.Metrics.counter('examplegen', 'examples-generated').inc()
+          yield audio_example(
+              clip_metadata=clip_metadata,
+              waveform=waveform,
+              sample_rate=resample_rate,
+              channel=channel,
+              annotations=clip_annotations,
+          )
+    except SoundfileError as e:
+      logging.info(e)
+      beam.metrics.Metrics.counter('examplegen', 'files-with-read-error').inc()
 
 
 def extension_filter(kept_extensions: Iterable[str]) -> beam.PTransform:

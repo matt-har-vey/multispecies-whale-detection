@@ -63,7 +63,7 @@ flags.DEFINE_list(
 )
 
 flags.DEFINE_integer(
-    'batch_size', 512,
+    'batch_size', 384,
     'Size of minibatches, common to both training and validation.')
 flags.DEFINE_float('learning_rate', 1e-4,
                    'Initial learning rate to pass to the optimizer.')
@@ -72,7 +72,7 @@ flags.DEFINE_float(
     'Fraction of units to drop out after the final global pooling layer.')
 
 flags.DEFINE_float(
-    'context_window_duration', 1.0,
+    'context_window_duration', 2.0,
     'Duration, in seconds, of audio input to a non-batch model call.')
 flags.DEFINE_integer('train_windows_per_clip', 4,
                      ('Number of random-start context windows to sample '
@@ -103,22 +103,27 @@ def main(argv: Sequence[str]) -> None:
 
   train_dataset = configured_window_dataset(
       'train',
-      dataset.RandomWindowing(4),
-  ).cache().repeat().shuffle(batch_size * 4).batch(batch_size).prefetch(1)
+      dataset.RandomWindowing(1),
+  ).cache().shuffle(1000000).batch(batch_size, drop_remainder=True).prefetch(1)
 
   validation_dataset = configured_window_dataset(
       'validation',
       dataset.SlidingWindowing(FLAGS.context_window_duration / 2),
-  ).cache().batch(batch_size).prefetch(1)
+  ).cache().batch(batch_size, drop_remainder=True).prefetch(1)
 
   model = tf.keras.Sequential([
       front_end.Spectrogram(
           front_end.SpectrogramConfig(
+              sample_rate=24000,
+              frame_seconds=0.05,
+              hop_seconds=0.025,
+              normalization=front_end.NoiseFloorConfig(),
               frequency_scaling=front_end.MelScalingConfig(
-                  lower_edge_hz=60.0,
-                  num_mel_bins=128,
+                  lower_edge_hz=125.0,
+                  num_mel_bins=64,
               ))),
-      front_end.SpectrogramToImage(),
+      front_end.SpectrogramToImage(sgram_max=30),
+      #front_end.SpectrogramToImage(model_min=-128, model_max=128),
       tf.keras.applications.EfficientNetB0(
           include_top=False,
           weights=None,
@@ -130,7 +135,11 @@ def main(argv: Sequence[str]) -> None:
 
   metrics = [
       tf.keras.metrics.BinaryAccuracy(),
-      tf.keras.metrics.AUC(),
+      tf.keras.metrics.AUC(
+          num_thresholds=200,
+          curve='ROC',
+          summation_method='interpolation',
+      ),
   ]
   for class_id, class_name in enumerate(class_names):
     metrics.extend([
@@ -160,17 +169,19 @@ def main(argv: Sequence[str]) -> None:
   model.fit(
       train_dataset,
       validation_data=validation_dataset,
-      epochs=10,
-      steps_per_epoch=10000,
+      epochs=100,
+      #steps_per_epoch=100,
       callbacks=[
           tf.keras.callbacks.ModelCheckpoint(
               os.path.join(base_dir, 'output', 'saved_models',
                            'epoch_{epoch:03d}')),
           tf.keras.callbacks.BackupAndRestore(
               os.path.join(base_dir, 'output', 'backup')),
-          tf.keras.callbacks.TensorBoard(os.path.join(base_dir, 'output',
-                                                      'tensorboard'),
-                                         update_freq='epoch'),
+          tf.keras.callbacks.TensorBoard(
+              os.path.join(base_dir, 'output','tensorboard'),
+              write_graph=False,
+              write_steps_per_second=True,
+              update_freq=1),
       ],
       verbose=2,  # We are using .fit() non-interactively.
   )

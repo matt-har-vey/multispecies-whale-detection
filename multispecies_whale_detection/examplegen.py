@@ -368,9 +368,11 @@ def read_annotations(infile: BinaryIO) -> Iterable[Tuple[str, Annotation]]:
     Pairs of filename and parsed Annotation.
   """
   reader = csv.DictReader(io.TextIOWrapper(infile))
-  for row in reader:
-    yield (row['filename'], Annotation.parse_csv_row(row))
-
+  for row_number, row in enumerate(reader):
+    try:
+      yield (row['filename'], Annotation.parse_csv_row(row))
+    except KeyError:
+      print(f'KeyError at row number {row_number}; full row:\n{row}')
 
 def beam_read_annotations(readable_file: fileio.ReadableFile):
   """Opens the file and calls read_annotations."""
@@ -428,7 +430,7 @@ def generate_clips(
           range(clip_duration_samples, subchunk_duration_samples, hop)):
         clip_rel_subchunk = datetime.timedelta(seconds=begin / sample_rate)
         clip_metadata = ClipMetadata(
-            filename=filename,
+           filename=filename,
             sample_rate=sample_rate,
             duration=clip_duration,
             index_in_file=clip_index_in_file,
@@ -441,6 +443,7 @@ def generate_clips(
       subchunk_rel_file += datetime.timedelta(
           seconds=subchunk_duration_samples / sample_rate)
   except xwav.Error:
+    #print(f'xwav.Error in file {infile}')
     # TODO(matharvey): Consider refactoring this by adding an abstraction layer
     # around both SoundFile and xwav.Reader, which would present a single API
     # here and give an extension point for new reader implementations. Do not
@@ -480,6 +483,8 @@ def generate_clips(
         raise SoundfileError from e
       yield (clip_metadata, clip_samples)
       clip_index_in_file += 1
+  #except KeyError:
+  #  print(f'KeyError in file {infile}')
 
 
 def audio_example(clip_metadata: ClipMetadata, waveform: np.array,

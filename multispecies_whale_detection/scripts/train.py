@@ -131,16 +131,21 @@ def main(argv: Sequence[str]) -> None:
   _ = next(iter(validation_dataset))
 
   sample_rate = probe_sample_rate(input_filepattern(base_dir, 'train'))
+
   model = models.Wrapper(
       layers=[
           tf.keras.Input([int(FLAGS.context_window_duration * sample_rate)]),
           front_end.Spectrogram(
               front_end.SpectrogramConfig(
+                  sample_rate=sample_rate,
+                  frame_seconds=0.05,
+                  hop_seconds=0.025,
+                  normalization=front_end.NoiseFloorConfig(),
                   frequency_scaling=front_end.MelScalingConfig(
                       lower_edge_hz=125.0,
                       num_mel_bins=64,
                   ))),
-          front_end.SpectrogramToImage(),
+          front_end.SpectrogramToImage(sgram_max=30),
           tf.keras.applications.EfficientNetB0(
               include_top=False,
               weights=None,

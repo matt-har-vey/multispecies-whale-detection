@@ -195,7 +195,11 @@ def main(argv: Sequence[str]) -> None:
       callbacks=[
           tf.keras.callbacks.ModelCheckpoint(
               os.path.join(base_dir, 'output', 'saved_models',
-                           'epoch_{epoch:03d}')),
+                           'epoch_{epoch:03d}'),
+              options=tf.saved_model.SaveOptions(function_aliases={
+                  'score': model.score,
+                  'metadata': model.metadata,
+              })),
           tf.keras.callbacks.BackupAndRestore(
               os.path.join(base_dir, 'output', 'backup')),
           tf.keras.callbacks.TensorBoard(

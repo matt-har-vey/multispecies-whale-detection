@@ -29,6 +29,7 @@ class Wrapper(tf.keras.Sequential):
       tf.TensorSpec(shape=tuple(), dtype=tf.int64)
   ])
   def score(self, waveform, context_step_samples):
+    waveform = tf.squeeze(waveform, -1)  # ensures single-channel
     batch_size = tf.shape(waveform)[0]
     context_step_samples = tf.cast(context_step_samples, tf.int32)
     context_windows = tf.signal.frame(
@@ -37,7 +38,12 @@ class Wrapper(tf.keras.Sequential):
     waveform_batch = tf.reshape(context_windows,
                                 [-1, self._context_width_samples])
     scores = self(waveform_batch)
-    return {'scores': tf.reshape(scores, [batch_size, num_windows, 1])}
+    return {
+        'scores':
+            tf.reshape(scores,
+                       [batch_size, num_windows,
+                        len(self._class_names)])
+    }
 
   @tf.function(input_signature=[])
   def metadata(self):

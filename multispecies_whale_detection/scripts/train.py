@@ -131,10 +131,11 @@ def main(argv: Sequence[str]) -> None:
   _ = next(iter(validation_dataset))
 
   sample_rate = probe_sample_rate(input_filepattern(base_dir, 'train'))
+  context_duration_samples = int(FLAGS.context_window_duration * sample_rate)
 
-  model = models.Wrapper(
+  model = models.FramedScoreWrapper(
       layers=[
-          tf.keras.Input([int(FLAGS.context_window_duration * sample_rate)]),
+          tf.keras.Input([context_duration_samples]),
           front_end.Spectrogram(
               front_end.SpectrogramConfig(
                   sample_rate=sample_rate,
@@ -193,13 +194,13 @@ def main(argv: Sequence[str]) -> None:
       epochs=100,
       #steps_per_epoch=100,
       callbacks=[
-          tf.keras.callbacks.ModelCheckpoint(
-              os.path.join(base_dir, 'output', 'saved_models',
-                           'epoch_{epoch:03d}'),
-              options=tf.saved_model.SaveOptions(function_aliases={
+          models.SaveCallback(
+              path_template=os.path.join(base_dir, 'output', 'saved_models',
+                                         'epoch_{epoch:03d}'),
+              signatures={
                   'score': model.score,
                   'metadata': model.metadata,
-              })),
+              }),
           tf.keras.callbacks.BackupAndRestore(
               os.path.join(base_dir, 'output', 'backup')),
           tf.keras.callbacks.TensorBoard(

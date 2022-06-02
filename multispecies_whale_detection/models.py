@@ -15,11 +15,11 @@
 import tensorflow as tf
 
 
-class Wrapper(tf.keras.Sequential):
+class FramedScoreWrapper(tf.keras.Sequential):
   """Wrapper for a window-level Model to frame and score longer clips."""
 
   def __init__(self, layers, input_sample_rate, class_names):
-    super(Wrapper, self).__init__(layers=layers)
+    super(FramedScoreWrapper, self).__init__(layers=layers)
     self._context_width_samples = layers[0].shape[-1]
     self._input_sample_rate = input_sample_rate
     self._class_names = class_names
@@ -52,3 +52,28 @@ class Wrapper(tf.keras.Sequential):
         'context_width_samples': self._context_width_samples,
         'class_names': tf.constant(self._class_names),
     }
+
+
+class SaveCallback(tf.keras.callbacks.Callback):
+  """Callback to export SavedModels using the Keras API.
+
+  The purpose is the same as that of tf.keras.callbacks.ModelCheckpoint, but
+  that does not support setting a custom value of signatures=, so we create
+  a special-case version here.
+  """
+
+  def __init__(self, path_template, signatures):
+    """Initializes this callback.
+
+    Args:
+      path_template: Formatting pattern that may include {epoch} to keep
+        separate outputs for each epoch.
+      signatures: See tf.saved_model.save, to which this argument is forwarded.
+    """
+    self._path_template = path_template
+    self._signatures = signatures
+
+  def on_epoch_end(self, epoch, logs=None):
+    """Calls keras.Model.save with custom signatures."""
+    self.model.save(
+        self._path_template.format(epoch=epoch), signatures=self._signatures)

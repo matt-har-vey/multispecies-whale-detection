@@ -709,5 +709,3 @@ def run(configuration: Configuration,
     # TODO(mattharvey): Implement customized text formatting for metadata.csv.
     _ = audio_files | 'WriteListing' >> beam.io.textio.WriteToText(
         os.path.join(configuration.output_directory, 'audio_files'))
-
-    return pipeline.run()

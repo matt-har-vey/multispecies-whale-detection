@@ -32,23 +32,15 @@ from multispecies_whale_detection import examplegen
 
 def run():
   """Configures and runs the pipeline and waits on completion."""
-  out_dir = os.path.expanduser('~/tmp/examplegen/shuffled_0507/input/validation')
-  shutil.rmtree(out_dir)
-  os.mkdir(out_dir)
-
   configuration = examplegen.Configuration(
       input_directory=os.path.expanduser('~/tmp/examplegen/input'),
-      output_directory=out_dir,
+      output_directory=os.path.expanduser('~/tmp/examplegen/output'),
       resample_rate=24000,
       clip_duration_seconds=2.0,
   )
 
-  options = pipeline_options.PipelineOptions(runner='DirectRunner', direct_num_workers=50, direct_running_mode='multi_processing')
-  result = examplegen.run(configuration, options)
-
-  metrics = result.metrics().query()
-  for counter in metrics['counters']:
-    print(counter)
+  options = pipeline_options.PipelineOptions(runner='SparkRunner')
+  examplegen.run(configuration, options)
 
 
 if __name__ == '__main__':
